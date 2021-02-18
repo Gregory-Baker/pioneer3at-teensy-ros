@@ -2,117 +2,90 @@
     Script for the interfacing Teensy3.2 with a Pioneer3AT Motor Control Board
 
 */
-#include "pioneer_pinout.h"
+#include "TeensyHW.h"
 #include "DCMotor.h"
 #include "OpticalEncoder.h"
 
 DCMotor* leftMotor;
-DCMotor* rightMotor; 
+DCMotor* rightMotor;
 
-IntervalTimer sampleTimer;
+TeensyHW teensy = TeensyHW();
 
-float test_vel = 1.0;               // Target motor velocity (Rad/Second)
-uint8_t encoder_read_freq = 10;     // Sample time of encoders
-double Kp = 0, Ki = 100, Kd = 0;    // PID gains
-boolean serial_comms = 1;           // Flag to Print outputs to serial. Note: Serial Monitor and ROS don't work well together.
+// Values used to test motor directly for development purposes
+boolean motor_test = false;
+float target_vel = 1.0;
 
-boolean led_status = 1;
-float battery_voltage = 0;
+int control_rate;
+float pid_gains[3];
 long ticksPerRev = 99650;
 
-double left_vel = 0;
-double right_vel = 0;
-float left_target_vel = test_vel;
-float right_target_vel = test_vel;
-
-unsigned long read_time;
+IntervalTimer sampleTimer;
 boolean sample_flag = false;
-int sample_interval = 1000000/encoder_read_freq;   // Time between control updates (microseconds)
-
-void setup() {
-
-  
-  // Initialise pins
-  pinMode(LED, OUTPUT);                   // LED
-  pinMode(MEN, OUTPUT);                   // Motor enable
-  pinMode(VBAT, INPUT);                   // Battery voltage, analog input (10 bit resolution)
-  digitalWrite(MEN, LOW);                 // LOW = motors enabled, HIGH = motors disabled
-
-  if (serial_comms) {
-    Serial.begin(9600);
-    Serial.println("Pioneer PID Test:");
-    while(!Serial);                       // TODO Currently only starts when serial plotter/monitor is opened
-    Serial.println("left_vel left_target right_vel right_target battery_voltage");
-  }
-  else {   
-    nh.initNode();
-  }
-  leftMotor = new DCMotor(LDIR, LPWM, LEFT
-                           , new OpticalEncoder(LEA, LEB, LEFT, ticksPerRev)
-                           , Kp, Ki, Kd
-                           , encoder_read_freq);
-                           
-  rightMotor = new DCMotor(RDIR, RPWM, RIGHT
-                           , new OpticalEncoder(REA, REB, RIGHT, ticksPerRev)
-                           , Kp, Ki, Kd
-                           , encoder_read_freq);
-  
-  
-  delay(2000);
-  digitalWrite(LED, led_status);
-
-  read_time = millis();
-  sampleTimer.begin(sample_flag_on, sample_interval);
-}
 
 void sample_flag_on() {
   sample_flag = true;
 }
 
-void print_values () {
-  Serial.print(left_vel);
-  Serial.print(" ");
-  Serial.print(left_target_vel);
-  Serial.print(" ");
+void setup() {
 
-  Serial.print(right_vel);
-  Serial.print(" ");
-  Serial.print(right_target_vel);
-  Serial.print(" ");
+  while (!nh.connected()) {
+    nh.spinOnce();
+  }
+  nh.initNode();
+  
+  int control_rate;
+  if (! nh.getParam("/pioneer/control_rate", &control_rate)) { 
+    //default value
+    control_rate = 10;
+  }
+  
+  if (! nh.getParam("/pioneer/pid_gains", pid_gains, 3)) { 
+    //default values
+    pid_gains[0]= 0;
+    pid_gains[1]= 100;
+    pid_gains[2]= 0;
+  }
+  
+  leftMotor = new DCMotor(LDIR, LPWM, LEFT
+                           , new OpticalEncoder(LEA, LEB, LEFT, ticksPerRev)
+                           , pid_gains[0], pid_gains[1], pid_gains[2]
+                           , control_rate);
+                           
+  rightMotor = new DCMotor(RDIR, RPWM, RIGHT
+                           , new OpticalEncoder(REA, REB, RIGHT, ticksPerRev)
+                           , pid_gains[0], pid_gains[1], pid_gains[2]
+                           , control_rate);
+                           
+  if (motor_test) {
+    leftMotor->SetTargetVelocity(target_vel);
+    rightMotor->SetTargetVelocity(target_vel); 
+  }
+  
+  int sample_interval = 1000000/(control_rate);   // Time between control updates (microseconds)
+  sampleTimer.begin(sample_flag_on, sample_interval);
 
-  Serial.println(battery_voltage);
-}
-
-// Gradient (m) and intercept (c) values yet to be established 
-float calculate_battery_voltage(int vbat_input) {
-  float vbat;
-  float m = 0.0165;
-  float c = -0.386;
-  return vbat = m*vbat_input + c;
 }
 
 void loop() {
 
-  nh.spinOnce(); 
+  nh.spinOnce();
+
+  if (sample_flag){
+    boolean pidOn = (teensy.ReadBattery() > 10)? true : false;
   
-  if (sample_flag) {
-    
-    battery_voltage = calculate_battery_voltage(analogRead(VBAT));
-
-    boolean pidOn;
-    pidOn = (battery_voltage > 10)? true : false;
-
-    leftMotor->SetPIDAuto(pidOn);
-    rightMotor->SetPIDAuto(pidOn);
-
-    if (serial_comms){
-      left_vel = leftMotor->Update(left_target_vel);
-      right_vel = rightMotor->Update(right_target_vel);
-      
-      print_values();
+    if (pidOn && !leftMotor->pidOn) {
+      leftMotor->PIDOn();
+      rightMotor->PIDOn();
     }
+    else if (!pidOn && leftMotor->pidOn) {
+      leftMotor->PIDOff();
+      rightMotor->PIDOff();
+    }
+
+    leftMotor->Update();
+    rightMotor->Update();
+
     sample_flag = false;
-    
   }
   
 }

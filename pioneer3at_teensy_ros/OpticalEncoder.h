@@ -8,25 +8,25 @@ const boolean RIGHT = true;
 
 class OpticalEncoder {
 
-private:
-
-  Encoder* encoder;
-  boolean wheelLR;
-  const long ticksPerRev;
-  std_msgs::Float32 msg;
-  ros::Publisher pub;
+  private:
   
-  long lastRead;
-  unsigned long lastReadTime;
-  double velocity;
-
+    Encoder* encoder;
+    boolean wheelLR;
+    const long ticksPerRev;
+    std_msgs::Float32 msg;
+    ros::Publisher pub;
+    
+    long lastRead;
+    unsigned long lastReadTime;
+    double velocity;
   
-public:
-
-  OpticalEncoder(const int, const int, const boolean, const long);
-  long GetCount();
-  float GetVelocity();
-  void PublishVelocity();
+    
+  public:
+  
+    OpticalEncoder(const int, const int, const boolean, const long);
+    long GetCount();
+    float GetVelocity();
+    void PublishVelocity();
   
 };
 
