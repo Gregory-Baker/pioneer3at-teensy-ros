@@ -11,7 +11,7 @@ class DCMotor {
     const boolean wheelLR;
     OpticalEncoder* encoder;
     const double Kp, Ki, Kd;
-    const int control_rate;
+    const int control_frequency;
     const int pwmFrequency;
     ros::Subscriber<std_msgs::Float32, DCMotor> sub;
     
@@ -42,7 +42,7 @@ class DCMotor {
   
 };
 
-DCMotor::DCMotor(const int DIR_pin, const int PWM_pin, const boolean wheelLR, OpticalEncoder* encoder, double Kp, double Ki, double Kd, const int control_rate)
+DCMotor::DCMotor(const int DIR_pin, const int PWM_pin, const boolean wheelLR, OpticalEncoder* encoder, double Kp, double Ki, double Kd, const int control_frequency)
   : DIR_pin(DIR_pin)
   , PWM_pin(PWM_pin)
   , wheelLR(wheelLR)
@@ -50,7 +50,7 @@ DCMotor::DCMotor(const int DIR_pin, const int PWM_pin, const boolean wheelLR, Op
   , Kp(1)
   , Ki(0)
   , Kd(0)
-  , control_rate(control_rate)
+  , control_frequency(control_frequency)
   , pwmFrequency(32000)
   , sub(wheelLR == LEFT ? "pioneer/left_wheel_cmd_vel" : "pioneer/right_wheel_cmd_vel", &DCMotor::motorCb, this)
 {
@@ -58,7 +58,7 @@ DCMotor::DCMotor(const int DIR_pin, const int PWM_pin, const boolean wheelLR, Op
   StopMotor();
   nh.subscribe(sub);
   motorPID = new PID(&motor_speed, &motor_pwm, &motor_target_speed, Kp, Ki, Kd, P_ON_M, DIRECT);
-  motorPID->SetSampleTime(1000/control_rate);
+  motorPID->SetSampleTime(1000/control_frequency);
   PIDOn();
 }
 
