@@ -29,6 +29,7 @@ class DCMotor {
     void GetMotorSpeed();
     void SetMotorSpeed();
     void PublishVelocity();
+    void PublishAngle();
     void motorCb(const std_msgs::Float32&);
   
   public:
@@ -97,6 +98,10 @@ void DCMotor::PublishVelocity(){
   encoder->PublishVelocity();
 }
 
+void DCMotor::PublishAngle(){
+  encoder->PublishAngle();
+}
+
 void DCMotor::SetMotorSpeed(){
   analogWrite(PWM_pin, motor_pwm);
 }
@@ -122,5 +127,7 @@ double DCMotor::Update() {
   motorPID->Compute();
   SetMotorSpeed();  
   PublishVelocity();
+  encoder->GetAngle();
+  PublishAngle();
   return motor_velocity;
 }

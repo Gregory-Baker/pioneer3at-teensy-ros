@@ -2,6 +2,8 @@
 #define TEENSYHW_H
 
 #include <ros.h>
+#include <std_msgs/Float32.h>
+
 ros::NodeHandle nh;
 
 const int LED = 13;           // LED pin
@@ -33,21 +35,30 @@ class TeensyHW {
   
   private:
     void initPins();
+    boolean ledState;
+    std_msgs::Float32 msg;
+    ros::Publisher pub;
+    double battery_voltage;
     
   public:
     TeensyHW();
     void LEDOn();
     void LEDOff();
+    void LEDToggle();
     float ReadBattery();
     void EnableMotors();
     void DisableMotors();
+    void PublishBatteryVoltage();
   
 };
 
-TeensyHW::TeensyHW() {
+TeensyHW::TeensyHW()
+  : pub("pioneer/battery_voltage", &msg)
+{
   initPins();
   EnableMotors();
   LEDOn();
+  nh.advertise(pub);
 }
 
 void TeensyHW::initPins() {
@@ -58,11 +69,18 @@ void TeensyHW::initPins() {
 }
 
 void TeensyHW::LEDOn() {
+  ledState = HIGH;
   digitalWrite(LED, HIGH);
 }
 
 void TeensyHW::LEDOff() {
+  ledState = LOW;
   digitalWrite(LED, HIGH);
+}
+
+void TeensyHW::LEDToggle() {
+  ledState = !ledState;
+  digitalWrite(LED, ledState);
 }
 
 float TeensyHW::ReadBattery() {
@@ -75,6 +93,12 @@ void TeensyHW::EnableMotors() {
 
 void TeensyHW::DisableMotors() {
   digitalWrite(MEN, HIGH);
+}
+
+void TeensyHW::PublishBatteryVoltage(){
+  battery_voltage = ReadBattery();
+  msg.data = battery_voltage;
+  pub.publish(&msg);
 }
 
 #endif

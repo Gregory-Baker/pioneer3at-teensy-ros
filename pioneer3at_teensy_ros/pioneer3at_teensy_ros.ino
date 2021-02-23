@@ -6,10 +6,10 @@
 #include "DCMotor.h"
 #include "OpticalEncoder.h"
 
+TeensyHW* teensy;
+
 DCMotor* leftMotor;
 DCMotor* rightMotor;
-
-TeensyHW teensy = TeensyHW();
 
 // Values used to test motor directly for development purposes
 boolean motor_test = false;
@@ -19,27 +19,39 @@ int control_frequency;
 float pid_gains[3];
 long ticksPerRev = 99650;
 
-IntervalTimer sampleTimer;
-boolean sample_flag = false;
+IntervalTimer controlTimer;
+boolean control_update_flag = false;
 
-void sample_flag_on() {
-  sample_flag = true;
+IntervalTimer slowTimer;
+boolean slow_update_flag = false;
+int slow_update_frequency = 1; //1Hz
+
+unsigned long blinkTimer = millis();
+
+void control_update_flag_on() {
+  control_update_flag = true;
+}
+
+void slow_update_flag_on() {
+  slow_update_flag = true;
 }
 
 void setup() {
-
+  
   while (!nh.connected()) {
     nh.spinOnce();
   }
   nh.initNode();
+
+  teensy = new TeensyHW();
   
   int control_frequency;
-  if (! nh.getParam("/pioneer/control_frequency", &control_frequency)) { 
+  if (! nh.getParam("control_frequency", &control_frequency)) { 
     //default value
     control_frequency = 10;
   }
   
-  if (! nh.getParam("/pioneer/pid_gains", pid_gains, 3)) { 
+  if (! nh.getParam("pid_gains", pid_gains, 3)) { 
     //default values
     pid_gains[0]= 0;
     pid_gains[1]= 100;
@@ -61,8 +73,11 @@ void setup() {
     rightMotor->SetTargetVelocity(target_vel); 
   }
   
-  int sample_interval = 1000000/(control_frequency);   // Time between control updates (microseconds)
-  sampleTimer.begin(sample_flag_on, sample_interval);
+  int control_update_interval = 1000000/(control_frequency);   // Time between control updates (microseconds)
+  controlTimer.begin(control_update_flag_on, control_update_interval);
+
+  int slow_update_interval = 1000000/(slow_update_frequency);
+  slowTimer.begin(slow_update_flag_on, slow_update_interval);
 
 }
 
@@ -70,16 +85,19 @@ void loop() {
 
   nh.spinOnce();
 
-  if (sample_flag){
+  if (control_update_flag){
 
     // The following code disables PID if Pioneer is turned off, to prevent PID output balooning.
-    boolean pidOn = (teensy.ReadBattery() > 10)? true : false;
-  
-    if (pidOn && !leftMotor->pidOn) {
-      leftMotor->PIDOn();
-      rightMotor->PIDOn();
+    float battVoltage = teensy->ReadBattery();
+    
+    if (battVoltage > 11.0) {
+      if (!leftMotor->pidOn) {
+        teensy->LEDOn();
+        leftMotor->PIDOn();
+        rightMotor->PIDOn(); 
+      }
     }
-    else if (!pidOn && leftMotor->pidOn) {
+    else if (leftMotor->pidOn) {
       leftMotor->PIDOff();
       rightMotor->PIDOff();
     }
@@ -87,6 +105,15 @@ void loop() {
     leftMotor->Update();
     rightMotor->Update();
 
-    sample_flag = false;
+    control_update_flag = false;
+  }
+
+  if(slow_update_flag) {
+    float battVoltage = teensy->ReadBattery();
+    if (battVoltage < 11) {
+      teensy->LEDToggle();
+    }
+    teensy->PublishBatteryVoltage();
+    slow_update_flag = false;
   }
 }
